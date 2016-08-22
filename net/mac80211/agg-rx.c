@@ -295,7 +295,7 @@ void __ieee80211_start_rx_ba_session(struct sta_info *sta,
 	params.buf_size = buf_size;
 
 	ht_dbg(sta->sdata, "AddBA Req buf_size=%d for %pM\n",
-		buf_size, sta->sta.addr);
+	       buf_size, sta->sta.addr);
 
 	/* examine state machine */
 	mutex_lock(&sta->ampdu_mlme.mtx);
