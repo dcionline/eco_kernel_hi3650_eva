@@ -1211,6 +1211,27 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
 		goto out;
 	}
 
+	i = 0;
+	do {
+		ret = bq24190_read(bdi, BQ24190_REG_F, &f_reg);
+		if (ret < 0) {
+			dev_err(bdi->dev, "Can't read F reg: %d\n", ret);
+			goto out;
+		}
+	} while (f_reg && ++i < 2);
+
+	if (f_reg != bdi->f_reg) {
+		if ((bdi->f_reg & battery_mask_f) != (f_reg & battery_mask_f))
+			alert_battery = true;
+		if ((bdi->f_reg & ~battery_mask_f) != (f_reg & ~battery_mask_f))
+			alert_charger = true;
+
+		bdi->f_reg = f_reg;
+		bdi->charger_health_valid = true;
+		bdi->battery_health_valid = true;
+		bdi->battery_status_valid = true;
+	}
+
 	if (ss_reg != bdi->ss_reg) {
 		/*
 		 * The device is in host mode so when PG_STAT goes from 1->0
@@ -1231,32 +1252,8 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
 			alert_battery = true;
 		if ((bdi->ss_reg & ~battery_mask_ss) != (ss_reg & ~battery_mask_ss))
 			alert_charger = true;
-
 		bdi->ss_reg = ss_reg;
 	}
-
-	mutex_lock(&bdi->f_reg_lock);
-
-	ret = bq24190_read(bdi, BQ24190_REG_F, &f_reg);
-	if (ret < 0) {
-		mutex_unlock(&bdi->f_reg_lock);
-		dev_err(bdi->dev, "Can't read F reg: %d\n", ret);
-		goto out;
-	}
-
-	if (f_reg != bdi->f_reg) {
-		if ((bdi->f_reg & battery_mask_f) != (f_reg & battery_mask_f))
-			alert_battery = true;
-		if ((bdi->f_reg & ~battery_mask_f) != (f_reg & ~battery_mask_f))
-			alert_charger = true;
-
-		bdi->f_reg = f_reg;
-		bdi->charger_health_valid = true;
-		bdi->battery_health_valid = true;
-		bdi->battery_status_valid = true;
-	}
-
-	mutex_unlock(&bdi->f_reg_lock);
 
 	if (alert_charger)
 		power_supply_changed(bdi->charger);
