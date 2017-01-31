@@ -1695,6 +1695,7 @@ static int ffs_func_eps_enable(struct ffs_function *func)
 			break;
 		}
 #endif
+
 		comp_desc = (struct usb_ss_ep_comp_descriptor *)(ds +
 				USB_DT_ENDPOINT_SIZE);
 		ep->ep->maxburst = comp_desc->bMaxBurst + 1;
