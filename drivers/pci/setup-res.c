@@ -78,6 +78,7 @@ static void pci_std_update_resource(struct pci_dev *dev, int resno)
 		 * as zero when disabled, so don't update ROM BARs unless
 		 * they're enabled.  See https://lkml.org/lkml/2005/8/30/138.
 		 */
+
 		if (!(res->flags & IORESOURCE_ROM_ENABLE))
 			return;
 
