@@ -2060,8 +2060,13 @@ static void read_capacity_error(struct scsi_disk *sdkp, struct scsi_device *sdp,
 static bool sd_addressable_capacity(u64 lba, unsigned int sector_size)
 {
 	u64 last_sector = (lba + 1ULL) << (ilog2(sector_size) - 9);
+
 	if (sizeof(sector_t) == 4 && last_sector > U32_MAX)
 		return false;
+
+	if (sizeof(sector_t) == 4 && last_sector > U32_MAX)
+		return false;
+
 	return true;
 }
 
