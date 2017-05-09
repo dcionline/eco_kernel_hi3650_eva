@@ -114,8 +114,36 @@ static inline size_t arch_copy_from_iter_pmem(void __pmem *addr, size_t bytes,
 	/* TODO: skip the write-back by always using non-temporal stores */
 	len = copy_from_iter_nocache(vaddr, bytes, i);
 
-	if (__iter_needs_pmem_wb(i))
-		__arch_wb_cache_pmem(vaddr, bytes);
+	/*
+	 * In the iovec case on x86_64 copy_from_iter_nocache() uses
+	 * non-temporal stores for the bulk of the transfer, but we need
+	 * to manually flush if the transfer is unaligned. A cached
+	 * memory copy is used when destination or size is not naturally
+	 * aligned. That is:
+	 *   - Require 8-byte alignment when size is 8 bytes or larger.
+	 *   - Require 4-byte alignment when size is 4 bytes.
+	 *
+	 * In the non-iovec case the entire destination needs to be
+	 * flushed.
+	 */
+	if (iter_is_iovec(i)) {
+		unsigned long flushed, dest = (unsigned long) addr;
+
+		if (bytes < 8) {
+			if (!IS_ALIGNED(dest, 4) || (bytes != 4))
+				__arch_wb_cache_pmem(addr, bytes);
+		} else {
+			if (!IS_ALIGNED(dest, 8)) {
+				dest = ALIGN(dest, boot_cpu_data.x86_clflush_size);
+				__arch_wb_cache_pmem(addr, 1);
+			}
+
+			flushed = dest - (unsigned long) addr;
+			if (bytes > flushed && !IS_ALIGNED(bytes - flushed, 8))
+				__arch_wb_cache_pmem(addr + bytes - 1, 1);
+		}
+	} else
+		__arch_wb_cache_pmem(addr, bytes);
 
 	return len;
 }
