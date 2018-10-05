@@ -889,7 +889,6 @@ static inline int build_open_flags(int flags, umode_t mode, struct open_flags *o
 	 * Clear out all open flags we don't know about so that we don't report
 	 * them in fcntl(F_GETFD) or similar interfaces.
 	 */
-	flags &= VALID_OPEN_FLAGS;
 
 	if (flags & (O_CREAT | __O_TMPFILE))
 		op->mode = (mode & S_IALLUGO) | S_IFREG;

@@ -1701,8 +1701,8 @@ static int ffs_func_eps_enable(struct ffs_function *func)
 					USB_DT_ENDPOINT_SIZE);
 			ep->ep->maxburst = comp_desc->bMaxBurst + 1;
 
-		if (needs_comp_desc)
 			ep->ep->comp_desc = comp_desc;
+		}
 
 		ret = usb_ep_enable(ep->ep);
 		if (likely(!ret)) {

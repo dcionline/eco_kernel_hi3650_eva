@@ -2919,12 +2919,11 @@ static int sd_revalidate_disk(struct gendisk *disk)
 		q->limits.io_opt = logical_to_bytes(sdp, sdkp->opt_xfer_blocks);
 		rw_max = logical_to_sectors(sdp, sdkp->opt_xfer_blocks);
 	} else
-<<<<<<< HEAD
+
 		rw_max = BLK_DEF_MAX_SECTORS;
-=======
+
 		rw_max = min_not_zero(logical_to_sectors(sdp, dev_max),
 				      (sector_t)BLK_DEF_MAX_SECTORS);
->>>>>>> 1f15cdf... scsi: sd: Consider max_xfer_blocks if opt_xfer_blocks is unusable
 
 	/* Do not exceed controller limit */
 	rw_max = min(rw_max, queue_max_hw_sectors(q));
