@@ -12,6 +12,16 @@ obj-$(CONFIG_CPU_FREQ_GOV_ONDEMAND)	+= cpufreq_ondemand.o
 obj-$(CONFIG_CPU_FREQ_GOV_CONSERVATIVE)	+= cpufreq_conservative.o
 obj-$(CONFIG_CPU_FREQ_GOV_INTERACTIVE)	+= cpufreq_interactive.o
 obj-$(CONFIG_CPU_FREQ_GOV_BLU_ACTIVE)+= cpufreq_blu_active.o
+obj-$(CONFIG_CPU_FREQ_GOV_INTERACTIVE_PRO)	+= cpufreq_interactive_pro.o
+obj-$(CONFIG_CPU_FREQ_GOV_BIOSHOCK)		+= cpufreq_bioshock.o
+obj-$(CONFIG_CPU_FREQ_GOV_DANCEDANCE)   	+= cpufreq_dancedance.o
+obj-$(CONFIG_CPU_FREQ_GOV_INTELLIMM)	        += cpufreq_intellimm.o
+obj-$(CONFIG_CPU_FREQ_GOV_LIONHEART)		+= cpufreq_lionheart.o
+obj-$(CONFIG_CPU_FREQ_GOV_SMARTASS2)		+= cpufreq_smartass2.o
+obj-$(CONFIG_CPU_FREQ_GOV_SMARTMAX)		+= cpufreq_smartmax.o
+obj-$(CONFIG_CPU_FREQ_GOV_SMARTMAX_EPS)		+= cpufreq_smartmax_eps.o
+obj-$(CONFIG_CPU_FREQ_GOV_WHEATLEY)	+= cpufreq_wheatley.o
+obj-$(CONFIG_CPU_FREQ_GOV_ZZMOOVE)      += cpufreq_zzmoove.o
 obj-$(CONFIG_CPU_FREQ_GOV_COMMON)		+= cpufreq_governor.o
 obj-$(CONFIG_CPU_BOOST)			+= cpu-boost.o
 

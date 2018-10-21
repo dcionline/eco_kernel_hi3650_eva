@@ -1,5 +1,5 @@
-/* SPDX-License-Identifier: GPL-2.0
- *
+/* SPDX-License-Identifier: GPL-2.0 */
+/*
  * Copyright (C) 2015-2018 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
  */
 
@@ -318,6 +318,59 @@ static inline int wait_for_random_bytes(void)
 	return 0;
 }
 #endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
+#include <linux/random.h>
+#include <linux/slab.h>
+struct rng_is_initialized_callback {
+	struct random_ready_callback cb;
+	atomic_t *rng_state;
+};
+static inline void rng_is_initialized_callback(struct random_ready_callback *cb)
+{
+	struct rng_is_initialized_callback *rdy = container_of(cb, struct rng_is_initialized_callback, cb);
+	atomic_set(rdy->rng_state, 2);
+	kfree(rdy);
+}
+static inline bool rng_is_initialized(void)
+{
+	static atomic_t rng_state = ATOMIC_INIT(0);
+
+	if (atomic_read(&rng_state) == 2)
+		return true;
+
+	if (atomic_cmpxchg(&rng_state, 0, 1) == 0) {
+		int ret;
+		struct rng_is_initialized_callback *rdy = kmalloc(sizeof(*rdy), GFP_ATOMIC);
+		if (!rdy) {
+			atomic_set(&rng_state, 0);
+			return false;
+		}
+		rdy->cb.owner = THIS_MODULE;
+		rdy->cb.func = rng_is_initialized_callback;
+		rdy->rng_state = &rng_state;
+		ret = add_random_ready_callback(&rdy->cb);
+		if (ret)
+			kfree(rdy);
+		if (ret == -EALREADY) {
+			atomic_set(&rng_state, 2);
+			return true;
+		} else if (ret)
+			atomic_set(&rng_state, 0);
+		return false;
+	}
+	return false;
+}
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
+/* This is a disaster. Without this API, we really have no way of
+ * knowing if it's initialized. We just return that it has and hope
+ * for the best... */
+static inline bool rng_is_initialized(void)
+{
+	return true;
+}
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0) && !defined(ISOPENSUSE15)
 static inline int get_random_bytes_wait(void *buf, int nbytes)
 {
@@ -449,7 +502,7 @@ static inline void kvfree_ours(const void *addr)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0) && !defined(ISOPENSUSE15)
-#define newlink(a,b,c,d,e) newlink(a,b,c,d)
+#define wg_newlink(a,b,c,d,e) wg_newlink(a,b,c,d)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
@@ -494,30 +547,36 @@ static inline struct nlattr **genl_family_attrbuf(const struct genl_family *fami
 #endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 2) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)) || (LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 16) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)) || (LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 65) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)) || (LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 101) && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) || LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 84)
-#define ___COMPAT_NETLINK_DUMP_BLOCK { int ret; skb->end -= nlmsg_total_size(sizeof(int)); ret = get_device_dump_real(skb, cb); skb->end += nlmsg_total_size(sizeof(int)); return ret; }
+#define ___COMPAT_NETLINK_DUMP_BLOCK { \
+	int ret; \
+	skb->end -= nlmsg_total_size(sizeof(int)); \
+	ret = wg_get_device_dump_real(skb, cb); \
+	skb->end += nlmsg_total_size(sizeof(int)); \
+	return ret; \
+}
 #define ___COMPAT_NETLINK_DUMP_OVERRIDE
 #else
-#define ___COMPAT_NETLINK_DUMP_BLOCK return get_device_dump_real(skb, cb);
+#define ___COMPAT_NETLINK_DUMP_BLOCK return wg_get_device_dump_real(skb, cb);
 #endif
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 8) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)) || (LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 25) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)) || LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 87)
-#define get_device_dump(a, b) get_device_dump_real(a, b); \
-static int get_device_dump(a, b) { \
-	struct wireguard_device *wg = (struct wireguard_device *)cb->args[0]; \
+#define wg_get_device_dump(a, b) wg_get_device_dump_real(a, b); \
+static int wg_get_device_dump(a, b) { \
+	struct wg_device *wg = (struct wg_device *)cb->args[0]; \
 	if (!wg) { \
-		int ret = get_device_start(cb); \
+		int ret = wg_get_device_start(cb); \
 		if (ret) \
 			return ret; \
 	} \
 	___COMPAT_NETLINK_DUMP_BLOCK \
 } \
-static int get_device_dump_real(a, b)
+static int wg_get_device_dump_real(a, b)
 #define COMPAT_CANNOT_USE_NETLINK_START
 #elif defined(___COMPAT_NETLINK_DUMP_OVERRIDE)
-#define get_device_dump(a, b) get_device_dump_real(a, b); \
-static int get_device_dump(a, b) { \
+#define wg_get_device_dump(a, b) wg_get_device_dump_real(a, b); \
+static int wg_get_device_dump(a, b) { \
 	___COMPAT_NETLINK_DUMP_BLOCK \
 } \
-static int get_device_dump_real(a, b)
+static int wg_get_device_dump_real(a, b)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0)
@@ -635,6 +694,66 @@ static inline void *skb_put_data(struct sk_buff *skb, const void *data, unsigned
 #endif
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+static inline void le32_to_cpu_array(u32 *buf, unsigned int words)
+{
+	while (words--) {
+		__le32_to_cpus(buf);
+		buf++;
+	}
+}
+static inline void cpu_to_le32_array(u32 *buf, unsigned int words)
+{
+	while (words--) {
+		__cpu_to_le32s(buf);
+		buf++;
+	}
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+#include <crypto/algapi.h>
+static inline void crypto_xor_cpy(u8 *dst, const u8 *src1, const u8 *src2,
+				  unsigned int size)
+{
+	if (IS_ENABLED(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS) &&
+	    __builtin_constant_p(size) &&
+	    (size % sizeof(unsigned long)) == 0) {
+		unsigned long *d = (unsigned long *)dst;
+		unsigned long *s1 = (unsigned long *)src1;
+		unsigned long *s2 = (unsigned long *)src2;
+
+		while (size > 0) {
+			*d++ = *s1++ ^ *s2++;
+			size -= sizeof(unsigned long);
+		}
+	} else {
+		if (unlikely(dst != src1))
+			memmove(dst, src1, size);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
+		crypto_xor(dst, src2, size);
+#else
+		__crypto_xor(dst, src2, size);
+#endif
+	}
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0)
+#define read_cpuid_part() read_cpuid_part_number()
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0)
+#define hlist_add_behind(a, b) hlist_add_after(b, a)
+#endif
+
+/* https://github.com/ClangBuiltLinux/linux/issues/7 */
+#ifdef __clang__
+#include <linux/bug.h>
+#undef BUILD_BUG_ON
+#define BUILD_BUG_ON(x)
+#endif
+
 /* https://lkml.kernel.org/r/20170624021727.17835-1-Jason@zx2c4.com */
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)
 #include <linux/ip.h>
@@ -667,59 +786,6 @@ static inline void new_icmpv6_send(struct sk_buff *skb, u8 type, u8 code, __u32 
 #define icmpv6_send(a,b,c,d) new_icmpv6_send(a,b,c,d)
 #endif
 
-/* https://lkml.kernel.org/r/20180618234347.13282-1-Jason@zx2c4.com */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
-#include <linux/random.h>
-#include <linux/slab.h>
-struct rng_is_initialized_callback {
-	struct random_ready_callback cb;
-	atomic_t *rng_state;
-};
-static inline void rng_is_initialized_callback(struct random_ready_callback *cb)
-{
-	struct rng_is_initialized_callback *rdy = container_of(cb, struct rng_is_initialized_callback, cb);
-	atomic_set(rdy->rng_state, 2);
-	kfree(rdy);
-}
-static inline bool rng_is_initialized(void)
-{
-	static atomic_t rng_state = ATOMIC_INIT(0);
-
-	if (atomic_read(&rng_state) == 2)
-		return true;
-
-	if (atomic_cmpxchg(&rng_state, 0, 1) == 0) {
-		int ret;
-		struct rng_is_initialized_callback *rdy = kmalloc(sizeof(*rdy), GFP_ATOMIC);
-		if (!rdy) {
-			atomic_set(&rng_state, 0);
-			return false;
-		}
-		rdy->cb.owner = THIS_MODULE;
-		rdy->cb.func = rng_is_initialized_callback;
-		rdy->rng_state = &rng_state;
-		ret = add_random_ready_callback(&rdy->cb);
-		if (ret)
-			kfree(rdy);
-		if (ret == -EALREADY) {
-			atomic_set(&rng_state, 2);
-			return true;
-		} else if (ret)
-			atomic_set(&rng_state, 0);
-		return false;
-	}
-	return false;
-}
-#else
-/* This is a disaster. Without this API, we really have no way of
- * knowing if it's initialized. We just return that it has and hope
- * for the best... */
-static inline bool rng_is_initialized(void)
-{
-	return true;
-}
-#endif
-
 /* PaX compatibility */
 #ifdef CONSTIFY_PLUGIN
 #include <linux/cache.h>
@@ -728,11 +794,11 @@ static inline bool rng_is_initialized(void)
 #endif
 #if defined(RAP_PLUGIN) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
 #include <linux/timer.h>
-#define expired_retransmit_handshake(a) expired_retransmit_handshake(unsigned long timer)
-#define expired_send_keepalive(a) expired_send_keepalive(unsigned long timer)
-#define expired_new_handshake(a) expired_new_handshake(unsigned long timer)
-#define expired_zero_key_material(a) expired_zero_key_material(unsigned long timer)
-#define expired_send_persistent_keepalive(a) expired_send_persistent_keepalive(unsigned long timer)
+#define wg_expired_retransmit_handshake(a) wg_expired_retransmit_handshake(unsigned long timer)
+#define wg_expired_send_keepalive(a) wg_expired_send_keepalive(unsigned long timer)
+#define wg_expired_new_handshake(a) wg_expired_new_handshake(unsigned long timer)
+#define wg_expired_zero_key_material(a) wg_expired_zero_key_material(unsigned long timer)
+#define wg_expired_send_persistent_keepalive(a) wg_expired_send_persistent_keepalive(unsigned long timer)
 #undef timer_setup
 #define timer_setup(a, b, c) setup_timer(a, ((void (*)(unsigned long))b), ((unsigned long)a))
 #undef from_timer

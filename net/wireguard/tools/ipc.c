@@ -1,5 +1,5 @@
-/* SPDX-License-Identifier: GPL-2.0
- *
+// SPDX-License-Identifier: GPL-2.0
+/*
  * Copyright (C) 2015-2018 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
  */
 
@@ -93,15 +93,6 @@ static int add_next_to_inflatable_buffer(struct inflatable_buffer *buffer)
 	buffer->good = false;
 	buffer->pos += len;
 	return 0;
-}
-
-static void warn_unrecognized(const char *which)
-{
-	static bool once = false;
-	if (once)
-		return;
-	once = true;
-	fprintf(stderr, "Warning: one or more unrecognized %s attributes\n", which);
 }
 
 static FILE *userspace_interface_file(const char *interface)
@@ -303,7 +294,7 @@ static int userspace_get_device(struct wgdevice **out, const char *interface)
 	FILE *f;
 	int ret = -EPROTO;
 
-	*out = dev = calloc(1, sizeof(struct wgdevice));
+	*out = dev = calloc(1, sizeof(*dev));
 	if (!dev)
 		return -errno;
 
@@ -341,7 +332,7 @@ static int userspace_get_device(struct wgdevice **out, const char *interface)
 			dev->fwmark = NUM(0xffffffffU);
 			dev->flags |= WGDEVICE_HAS_FWMARK;
 		} else if (!strcmp(key, "public_key")) {
-			struct wgpeer *new_peer = calloc(1, sizeof(struct wgpeer));
+			struct wgpeer *new_peer = calloc(1, sizeof(*new_peer));
 
 			if (!new_peer) {
 				ret = -ENOMEM;
@@ -407,7 +398,7 @@ static int userspace_get_device(struct wgdevice **out, const char *interface)
 
 			if (!mask || !isdigit(mask[0]))
 				break;
-			new_allowedip = calloc(1, sizeof(struct wgallowedip));
+			new_allowedip = calloc(1, sizeof(*new_allowedip));
 			if (!new_allowedip) {
 				ret = -ENOMEM;
 				goto err;
@@ -438,8 +429,6 @@ static int userspace_get_device(struct wgdevice **out, const char *interface)
 			peer->tx_bytes = NUM(0xffffffffffffffffULL);
 		else if (!strcmp(key, "errno"))
 			ret = -NUM(0x7fffffffU);
-		else
-			warn_unrecognized("daemon");
 	}
 	ret = -EPROTO;
 err:
@@ -541,8 +530,15 @@ another:
 		goto cleanup;
 	}
 	if ((len = mnl_cb_run(rtnl_buffer, len, seq, portid, read_devices_cb, buffer)) < 0) {
-		ret = -errno;
-		goto cleanup;
+		/* Netlink returns NLM_F_DUMP_INTR if the set of all tunnels changed
+		 * during the dump. That's unfortunate, but is pretty common on busy
+		 * systems that are adding and removing tunnels all the time. Rather
+		 * than retrying, potentially indefinitely, we just work with the
+		 * partial results. */
+		if (errno != EINTR) {
+			ret = -errno;
+			goto cleanup;
+		}
 	}
 	if (len == MNL_CB_OK + 1)
 		goto another;
@@ -558,7 +554,6 @@ cleanup:
 static int kernel_set_device(struct wgdevice *dev)
 {
 	int ret = 0;
-	size_t i, j;
 	struct wgpeer *peer = NULL;
 	struct wgallowedip *allowedip = NULL;
 	struct nlattr *peers_nest, *peer_nest, *allowedips_nest, *allowedip_nest;
@@ -591,10 +586,10 @@ again:
 		goto send;
 	peers_nest = peer_nest = allowedips_nest = allowedip_nest = NULL;
 	peers_nest = mnl_attr_nest_start(nlh, WGDEVICE_A_PEERS);
-	for (i = 0, peer = peer ? peer : dev->first_peer; peer; peer = peer->next_peer) {
+	for (peer = peer ? peer : dev->first_peer; peer; peer = peer->next_peer) {
 		uint32_t flags = 0;
 
-		peer_nest = mnl_attr_nest_start_check(nlh, SOCKET_BUFFER_SIZE, i++);
+		peer_nest = mnl_attr_nest_start_check(nlh, SOCKET_BUFFER_SIZE, 0);
 		if (!peer_nest)
 			goto toobig_peers;
 		if (!mnl_attr_put_check(nlh, SOCKET_BUFFER_SIZE, WGPEER_A_PUBLIC_KEY, sizeof(peer->public_key), peer->public_key))
@@ -630,8 +625,8 @@ again:
 			allowedips_nest = mnl_attr_nest_start_check(nlh, SOCKET_BUFFER_SIZE, WGPEER_A_ALLOWEDIPS);
 			if (!allowedips_nest)
 				goto toobig_allowedips;
-			for (j = 0; allowedip; allowedip = allowedip->next_allowedip) {
-				allowedip_nest = mnl_attr_nest_start_check(nlh, SOCKET_BUFFER_SIZE, j++);
+			for (; allowedip; allowedip = allowedip->next_allowedip) {
+				allowedip_nest = mnl_attr_nest_start_check(nlh, SOCKET_BUFFER_SIZE, 0);
 				if (!allowedip_nest)
 					goto toobig_allowedips;
 				if (!mnl_attr_put_u16_check(nlh, SOCKET_BUFFER_SIZE, WGALLOWEDIP_A_FAMILY, allowedip->family))
@@ -711,8 +706,6 @@ static int parse_allowedip(const struct nlattr *attr, void *data)
 		if (!mnl_attr_validate(attr, MNL_TYPE_U8))
 			allowedip->cidr = mnl_attr_get_u8(attr);
 		break;
-	default:
-		warn_unrecognized("netlink");
 	}
 
 	return MNL_CB_OK;
@@ -721,7 +714,7 @@ static int parse_allowedip(const struct nlattr *attr, void *data)
 static int parse_allowedips(const struct nlattr *attr, void *data)
 {
 	struct wgpeer *peer = data;
-	struct wgallowedip *new_allowedip = calloc(1, sizeof(struct wgallowedip));
+	struct wgallowedip *new_allowedip = calloc(1, sizeof(*new_allowedip));
 	int ret;
 
 	if (!new_allowedip) {
@@ -792,8 +785,6 @@ static int parse_peer(const struct nlattr *attr, void *data)
 		break;
 	case WGPEER_A_ALLOWEDIPS:
 		return mnl_attr_parse_nested(attr, parse_allowedips, peer);
-	default:
-		warn_unrecognized("netlink");
 	}
 
 	return MNL_CB_OK;
@@ -802,7 +793,7 @@ static int parse_peer(const struct nlattr *attr, void *data)
 static int parse_peers(const struct nlattr *attr, void *data)
 {
 	struct wgdevice *device = data;
-	struct wgpeer *new_peer = calloc(1, sizeof(struct wgpeer));
+	struct wgpeer *new_peer = calloc(1, sizeof(*new_peer));
 	int ret;
 
 	if (!new_peer) {
@@ -862,8 +853,6 @@ static int parse_device(const struct nlattr *attr, void *data)
 		break;
 	case WGDEVICE_A_PEERS:
 		return mnl_attr_parse_nested(attr, parse_peers, device);
-	default:
-		warn_unrecognized("netlink");
 	}
 
 	return MNL_CB_OK;
@@ -903,7 +892,7 @@ static int kernel_get_device(struct wgdevice **device, const char *interface)
 	struct mnlg_socket *nlg;
 
 try_again:
-	*device = calloc(1, sizeof(struct wgdevice));
+	*device = calloc(1, sizeof(**device));
 	if (!*device)
 		return -errno;
 

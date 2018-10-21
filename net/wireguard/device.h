@@ -1,5 +1,5 @@
-/* SPDX-License-Identifier: GPL-2.0
- *
+/* SPDX-License-Identifier: GPL-2.0 */
+/*
  * Copyright (C) 2015-2018 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
  */
 
@@ -18,7 +18,7 @@
 #include <linux/net.h>
 #include <linux/ptr_ring.h>
 
-struct wireguard_device;
+struct wg_device;
 
 struct multicore_worker {
 	void *ptr;
@@ -36,13 +36,14 @@ struct crypt_queue {
 	};
 };
 
-struct wireguard_device {
+struct wg_device {
 	struct net_device *dev;
 	struct crypt_queue encrypt_queue, decrypt_queue;
 	struct sock __rcu *sock4, *sock6;
 	struct net *creating_net;
 	struct noise_static_identity static_identity;
-	struct workqueue_struct *handshake_receive_wq, *handshake_send_wq, *packet_crypt_wq;
+	struct workqueue_struct *handshake_receive_wq, *handshake_send_wq;
+	struct workqueue_struct *packet_crypt_wq;
 	struct sk_buff_head incoming_handshakes;
 	int incoming_handshake_cpu;
 	struct multicore_worker __percpu *incoming_handshakes_worker;
@@ -58,7 +59,7 @@ struct wireguard_device {
 	bool have_creating_net_ref;
 };
 
-int device_init(void);
-void device_uninit(void);
+int wg_device_init(void);
+void wg_device_uninit(void);
 
 #endif /* _WG_DEVICE_H */
