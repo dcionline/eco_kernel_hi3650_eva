@@ -110,12 +110,8 @@ static inline int ioremap_pud_range(pgd_t *pgd, unsigned long addr,
 
 		if (ioremap_pud_enabled() &&
 		    ((next - addr) == PUD_SIZE) &&
-<<<<<<< HEAD
-		    IS_ALIGNED(phys_addr + addr, PUD_SIZE)) {
-=======
 		    IS_ALIGNED(phys_addr + addr, PUD_SIZE) &&
 		    pud_free_pmd_page(pud, addr)) {
->>>>>>> d8a2e2e... ioremap: Update pgtable free interfaces with addr
 			if (pud_set_huge(pud, phys_addr + addr, prot))
 				continue;
 		}
