@@ -50,11 +50,20 @@ asmlinkage void spurious_interrupt(void)
 void __init init_IRQ(void)
 {
 	int i;
+	unsigned int order = get_order(IRQ_STACK_SIZE);
 
 	for (i = 0; i < NR_IRQS; i++)
 		irq_set_noprobe(i);
 
 	arch_init_irq();
+
+	for_each_possible_cpu(i) {
+		void *s = (void *)__get_free_pages(GFP_KERNEL, order);
+
+		irq_stack[i] = s;
+		pr_debug("CPU%d IRQ stack at 0x%p - 0x%p\n", i,
+			irq_stack[i], irq_stack[i] + IRQ_STACK_SIZE);
+	}
 }
 
 #ifdef CONFIG_DEBUG_STACKOVERFLOW
@@ -92,4 +101,3 @@ void __irq_entry do_IRQ(unsigned int irq)
 	generic_handle_irq(irq);
 	irq_exit();
 }
-
