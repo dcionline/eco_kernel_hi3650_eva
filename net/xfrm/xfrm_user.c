@@ -165,6 +165,22 @@ static int verify_newsa_info(struct xfrm_usersa_info *p,
 		goto out;
 	}
 
+	switch (p->sel.family) {
+
+		break;
+
+	case AF_INET6:
+#if IS_ENABLED(CONFIG_IPV6)
+		break;
+#else
+		err = -EAFNOSUPPORT;
+		goto out;
+#endif
+
+	default:
+		goto out;
+	}
+
 	err = -EINVAL;
 	switch (p->id.proto) {
 	case IPPROTO_AH:
